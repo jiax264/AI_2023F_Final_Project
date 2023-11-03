@@ -41,22 +41,25 @@ y_val_tensor = torch.LongTensor(y_val)
 class FeedforwardNN(nn.Module):
     def __init__(self, input_dim):
         super(FeedforwardNN, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 4)  # 4 classes: morning, afternoon, night, late night
+        self.fc1 = nn.Linear(input_dim, 256)
+        self.fc2 = nn.Linear(256,1024)
+        self.fc3 = nn.Linear(1024, 256)
+        self.fc4 = nn.Linear(256, 4)  # 4 classes: morning, afternoon, night, late night
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = torch.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
+model = FeedforwardNN(2)
 
-model = FeedforwardNN(X_train.shape[1])
+# model = FeedforwardNN(X_train.shape[1])
 
 # Parameters
-epochs = 10
+epochs = 30
 batch_size = 64
-learning_rate = 0.001
+learning_rate = 0.1
 
 # Loss and Optimizer
 criterion = nn.CrossEntropyLoss()
@@ -71,13 +74,22 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size)
 # Training loop
 for epoch in range(epochs):
     model.train()
+
+    train_loss = 0.0
     for X_batch, y_batch in tqdm(train_loader):
         # Zero gradients
         optimizer.zero_grad()
 
+        #debug
+        X_batch = X_batch[:,0:2]
+        y_batch[y_batch == 0] = 1
+        y_batch[y_batch == 2] = 1
+        y_batch[y_batch == 3] = 1
         # Forward pass
         outputs = model(X_batch)
         loss = criterion(outputs, y_batch)
+
+        train_loss += loss.item()
 
         # Backward pass and optimize
         loss.backward()
@@ -86,13 +98,16 @@ for epoch in range(epochs):
     # Validation loss
     model.eval()
     val_loss = 0.0
-    with torch.no_grad():
-        for X_batch, y_batch in val_loader:
-            outputs = model(X_batch)
-            loss = criterion(outputs, y_batch)
-            val_loss += loss.item()
 
-    print(f'Epoch {epoch + 1}/{epochs}, Validation Loss: {val_loss / len(val_loader)}')
+    print(f'Epoch {epoch + 1}/{epochs}, Training Loss: {train_loss / len(train_loader)}')
+
+    # with torch.no_grad():
+    #     for X_batch, y_batch in val_loader:
+    #         outputs = model(X_batch)
+    #         loss = criterion(outputs, y_batch)
+    #         val_loss += loss.item()
+
+    # print(f'Epoch {epoch + 1}/{epochs}, Validation Loss: {val_loss / len(val_loader)}')
 
 
 def evaluate_model(model, loader, dataset_type="Training"):
