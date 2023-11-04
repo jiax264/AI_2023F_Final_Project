@@ -6,8 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import tqdm
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder
 
 
 # # read data and apply one-hot encoding
@@ -32,56 +31,47 @@ train_df = pd.read_csv('../03_Data_for_Modeling/train.csv')
 X_train = train_df.drop(columns=['time_window'])
 y_train = train_df['time_window']
 
-ohe = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(y_train.values.reshape(-1, 1))
-y_train = ohe.transform(y_train.values.reshape(-1, 1))
-
-# check one hot-encoding
-unique_categories = ohe.categories_[0]
-unique_categories_list = unique_categories.tolist()
-
-for index, category in enumerate(unique_categories_list):
-    one_hot_encoded_value = [0] * len(unique_categories_list)
-    one_hot_encoded_value[index] = 1
-    print(f'{category}: {one_hot_encoded_value}')
+label_encoder = LabelEncoder()
+y_train = label_encoder.fit_transform(train_df['time_window'])
 
 valid_df = pd.read_csv('../03_Data_for_Modeling/valid.csv')
 
 X_test = valid_df.drop(columns=['time_window'])
 y_test = valid_df['time_window']
 
-y_test = ohe.transform(y_test.values.reshape(-1, 1))
+y_test = label_encoder.transform(y_test)
 
 X_train = torch.tensor(X_train.values, dtype=torch.float32)
-y_train = torch.tensor(y_train, dtype=torch.float32)
+y_train = torch.tensor(y_train, dtype=torch.long)
 X_test = torch.tensor(X_test.values, dtype=torch.float32)
-y_test = torch.tensor(y_test, dtype=torch.float32)
+y_test = torch.tensor(y_test, dtype=torch.long)
 
+# Print the mapping
+print("Label mapping:")
+for original_label, encoded_label in zip(label_encoder.classes_, range(len(label_encoder.classes_))):
+    print(f'{original_label}: {encoded_label}')
 
 class Multiclass(nn.Module):
     def __init__(self):
         super().__init__()
-        self.hidden1 = nn.Linear(24, 256)
-        self.hidden2 = nn.Linear(256, 1024)
-        self.hidden3 = nn.Linear(1024, 256)
-        self.hidden4 = nn.Linear(256, 64)
+        self.hidden1 = nn.Linear(24, 64)
+        self.hidden2 = nn.Linear(64, 64)
         self.act = nn.ReLU()
         self.output = nn.Linear(64, 4)
 
     def forward(self, x):
         x = self.act(self.hidden1(x))
         x = self.act(self.hidden2(x))
-        x = self.act(self.hidden3(x))
-        x = self.act(self.hidden4(x))
         x = self.output(x)
         return x
 
 # loss metric and optimizer
 model = Multiclass()
 loss_fn = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+optimizer = optim.Adam(model.parameters(), lr=0.1)
 
 # prepare model and training parameters
-n_epochs = 300
+n_epochs = 50
 batch_size = 64
 batches_per_epoch = len(X_train) // batch_size
 
@@ -114,7 +104,7 @@ for epoch in range(n_epochs):
             # update weights
             optimizer.step()
             # compute and store metrics
-            acc = (torch.argmax(y_pred, 1) == torch.argmax(y_batch, 1)).float().mean()
+            acc = (torch.argmax(y_pred, 1) == y_batch).float().mean()
             epoch_loss.append(float(loss))
             epoch_acc.append(float(acc))
             bar.set_postfix(
@@ -125,7 +115,7 @@ for epoch in range(n_epochs):
     model.eval()
     y_pred = model(X_test)
     ce = loss_fn(y_pred, y_test)
-    acc = (torch.argmax(y_pred, 1) == torch.argmax(y_test, 1)).float().mean()
+    acc = (torch.argmax(y_pred, 1) == y_test).float().mean()
     ce = float(ce)
     acc = float(acc)
     train_loss_hist.append(np.mean(epoch_loss))
