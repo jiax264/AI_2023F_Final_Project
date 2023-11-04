@@ -8,43 +8,44 @@ import torch.optim as optim
 import tqdm
 from sklearn.preprocessing import LabelEncoder
 
-
-# # read data and apply one-hot encoding
-# url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/iris.csv"
-# data = pd.read_csv(url, header=None)
-# X = data.iloc[:, 0:4]
-# y = data.iloc[:, 4:]
-# ohe = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(y)
-# y = ohe.transform(y)
-#
-# # convert pandas DataFrame (X) and numpy array (y) into PyTorch tensors
-# X = torch.tensor(X.values, dtype=torch.float32)
-# y = torch.tensor(y, dtype=torch.float32)
-#
-# # split
-# X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.7, shuffle=True)
-
-
-
 train_df = pd.read_csv('../03_Data_for_Modeling/train.csv')
-
-X_train = train_df.drop(columns=['time_window'])
-y_train = train_df['time_window']
-
+train_df = train_df.sample(frac=1, random_state=1).reset_index(drop=True)
+train_df_subset = train_df.iloc[:1000]
+X_train = train_df_subset.drop(columns=['time_window'])
+y_train = train_df_subset['time_window']
 label_encoder = LabelEncoder()
-y_train = label_encoder.fit_transform(train_df['time_window'])
-
-valid_df = pd.read_csv('../03_Data_for_Modeling/valid.csv')
-
-X_test = valid_df.drop(columns=['time_window'])
-y_test = valid_df['time_window']
-
-y_test = label_encoder.transform(y_test)
-
+y_train = label_encoder.fit_transform(y_train)
 X_train = torch.tensor(X_train.values, dtype=torch.float32)
 y_train = torch.tensor(y_train, dtype=torch.long)
+
+valid_df = pd.read_csv('../03_Data_for_Modeling/valid.csv')
+valid_df = valid_df.sample(frac=1, random_state=1).reset_index(drop=True)
+valid_df_subset = valid_df.iloc[:100]
+X_test = valid_df_subset.drop(columns=['time_window'])
+y_test = valid_df_subset['time_window']
+y_test = label_encoder.transform(y_test)
 X_test = torch.tensor(X_test.values, dtype=torch.float32)
 y_test = torch.tensor(y_test, dtype=torch.long)
+
+# train_df = pd.read_csv('../03_Data_for_Modeling/train.csv')
+#
+# X_train = train_df.drop(columns=['time_window'])
+# y_train = train_df['time_window']
+#
+# label_encoder = LabelEncoder()
+# y_train = label_encoder.fit_transform(train_df['time_window'])
+#
+# valid_df = pd.read_csv('../03_Data_for_Modeling/valid.csv')
+#
+# X_test = valid_df.drop(columns=['time_window'])
+# y_test = valid_df['time_window']
+#
+# y_test = label_encoder.transform(y_test)
+#
+# X_train = torch.tensor(X_train.values, dtype=torch.float32)
+# y_train = torch.tensor(y_train, dtype=torch.long)
+# X_test = torch.tensor(X_test.values, dtype=torch.float32)
+# y_test = torch.tensor(y_test, dtype=torch.long)
 
 # Print the mapping
 print("Label mapping:")
@@ -54,8 +55,8 @@ for original_label, encoded_label in zip(label_encoder.classes_, range(len(label
 class Multiclass(nn.Module):
     def __init__(self):
         super().__init__()
-        self.hidden1 = nn.Linear(24, 64)
-        self.hidden2 = nn.Linear(64, 64)
+        self.hidden1 = nn.Linear(24, 128)
+        self.hidden2 = nn.Linear(128, 64)
         self.act = nn.ReLU()
         self.output = nn.Linear(64, 4)
 
@@ -68,11 +69,10 @@ class Multiclass(nn.Module):
 # loss metric and optimizer
 model = Multiclass()
 loss_fn = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.1)
-
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 # prepare model and training parameters
-n_epochs = 50
-batch_size = 64
+n_epochs = 1000
+batch_size = 5
 batches_per_epoch = len(X_train) // batch_size
 
 best_acc = - np.inf   # init to negative infinity
