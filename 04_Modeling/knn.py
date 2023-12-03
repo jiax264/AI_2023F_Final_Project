@@ -33,31 +33,47 @@ tree = BallTree(train[['latitude', 'longitude']].values)
 
 k_value = 4
 
+def calculate_mode_time_window_of_nearest(train_tree, train_data_with_coords, point, k=k_value):
+    # Query the BallTree for k+1 nearest neighbors
+    dist, ind = train_tree.query(point, k=k + 1)
+    neighbors_indices = ind[0]
 
-def calculate_mode_time_window_of_nearest(train_tree, train_data, point, k=k_value):
-    dist, ind = train_tree.query(point, k=k)
-    time_windows = train_data.iloc[ind[0]]['time_window']
+    # Fetch the neighbors from the training data using indices
+    neighbors = train_data_with_coords.iloc[neighbors_indices]
 
+    # Check if the first neighbor is the point itself
+    point_series = pd.Series(point.flatten(), index=['latitude', 'longitude'])
+    if (neighbors.head(1)[['latitude', 'longitude']] == point_series).all(axis=1).any():
+        neighbors = neighbors.iloc[1:]  # Exclude the first neighbor
+    else:
+        neighbors = neighbors.iloc[:k]  # Keep only the first k neighbors
+
+    # Extract 'time_window' from the neighbors DataFrame
+    time_windows = neighbors['time_window']
+
+    # Check if there are enough neighbors
     if len(time_windows) < k:
         return np.nan
 
+    # Calculate the mode of the 'time_window'
     mode_result = mode(time_windows)
     modes = mode_result.mode
 
+    # Handle the mode results
     if modes.size == 0:  # No mode found
         return np.nan
     elif modes.size > 1:  # Handle ties by selecting a random mode
         return random.choice(modes)
     else:
         return modes.item()
-
-
+    
+train_data_with_coords = train[['latitude', 'longitude', 'time_window']]    
 has_time_df['most_common_time_window_{}_neigh'.format(k_value)] = has_time_df.apply(
     lambda row: calculate_mode_time_window_of_nearest(
-        tree,
-        train[['time_window']],
+        tree, 
+        train_data_with_coords,  
         np.array([[row['latitude'], row['longitude']]]),
-    ),
+    ), 
     axis=1
 )
 
